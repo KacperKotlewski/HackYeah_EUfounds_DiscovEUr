@@ -1,0 +1,98 @@
+version: '3'
+services:
+  # --------------------------------------
+  # BASE SERVICES
+  # --------------------------------------
+  postgresql-database:
+    container_name: ${DATABASE_HOST}
+    image: postgres:13-alpine
+    volumes:
+      - ./app_data/database:/var/lib/postgresql/data
+    networks:
+      - strapi_net
+    environment:
+      POSTGRES_USER: ${DATABASE_USERNAME}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    restart: unless-stopped
+    profiles: 
+      - production
+      - dev
+
+  strapi-cms-base:
+    build: 
+      context: ./
+      dockerfile: strapi_app/Dockerfile
+      target: development
+    ports:
+      - ${STRAPI_PORT}:${STRAPI_PORT}
+    networks:
+      - strapi_net
+    depends_on:
+      - postgresql-database
+    restart: unless-stopped
+    profiles:
+      - norun
+    volumes:
+      # - ./app_data/strapi/config:/opt/app/config
+      - ./strapi_src:/app/src
+      - ./app_data/strapi_uploads:/app/public/uploads
+
+  # --------------------------------------
+  # DEVELOPEMENT SERVICES
+  # --------------------------------------
+
+  strapi-dev:
+    extends:
+      service: strapi-cms-base
+    profiles:
+      - dev
+
+  # --------------------------------------
+  # TEST SERVICES
+  # --------------------------------------
+  pgadmin:
+    image: dpage/pgadmin4
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${DATABASE_PASSWORD}
+    ports:
+      - 8062:80
+    expose:
+      - 8062
+    profiles:
+      - norun
+    networks:
+      - strapi_net
+
+  # --------------------------------------
+  # PRODUCTION SERVICES
+  # --------------------------------------
+  strapi-prod:
+    extends:
+      service: strapi-cms-base
+    build: 
+      target: production
+    # depends_on:
+    #   - redis-cache
+    profiles:
+      - production
+
+  astro-frontend:
+    build: 
+      context: ./astro_frontend
+      dockerfile: ./Dockerfile
+      target: 'runtime'
+    restart: unless-stopped
+    ports:
+      - 4321:${FRONTEND_PORT}
+    networks:
+      - strapi_net
+    depends_on:
+      - strapi-prod
+    profiles:
+      - production
+
+networks:
+  strapi_net:
